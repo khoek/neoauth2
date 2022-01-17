@@ -11,7 +11,7 @@ public abstract class SimpleEphemeralServer {
 
     public static final String LOCALHOST = "localhost";
 
-    private HttpServer server;
+    private final HttpServer server;
 
     @SneakyThrows
     public SimpleEphemeralServer() {

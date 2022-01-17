@@ -1,6 +1,6 @@
 package io.hoek.neoauth2.model;
 
-import io.hoek.neoauth2.internal.ParamWriter;
+import io.hoek.neoauth2.ParamWriter;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 

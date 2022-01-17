@@ -1,6 +1,7 @@
 package io.hoek.neoauth2.internal;
 
-import io.hoek.neoauth2.endpoint.ReturnErrorResponseException;
+import io.hoek.neoauth2.exception.WritableWebApplicationException.Redirect;
+import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
 import io.hoek.neoauth2.model.ErrorResponse;
 
 import javax.ws.rs.core.Response;
@@ -24,19 +25,21 @@ public class InvalidRequestException extends Exception {
         return errorMessage;
     }
 
-    public ReturnErrorResponseException toRedirectException(URI redirectUri, String state) {
-        return new ReturnErrorResponseException.Redirect(redirectUri, new ErrorResponse(error, errorMessage, state));
+    public Redirect toRedirectException(URI redirectUri, String state) {
+        return new Redirect(redirectUri, new ErrorResponse(error, errorMessage, state));
     }
 
-    public ReturnErrorResponseException toErrorPageException() {
+    public JsonPage toErrorPageException() {
         return toErrorPageException(null);
     }
 
-    public ReturnErrorResponseException toErrorPageException(String state) {
-        return new ReturnErrorResponseException.ErrorPage(new ErrorResponse(error, errorMessage, state));
+    // FIXME Consider properly supporting the 401 which is supposed to be returned in that specific instance as per the
+    //       OAuth spec (Ctrl-F to find it)
+    public JsonPage toErrorPageException(String state) {
+        return new JsonPage(Response.Status.BAD_REQUEST, new ErrorResponse(error, errorMessage, state));
     }
 
-    public ReturnErrorResponseException toErrorPageException(Response.Status status, String state) {
-        return new ReturnErrorResponseException.ErrorPage(status, new ErrorResponse(error, errorMessage, state));
+    public JsonPage toErrorPageException(Response.Status status, String state) {
+        return new JsonPage(status, new ErrorResponse(error, errorMessage, state));
     }
 }

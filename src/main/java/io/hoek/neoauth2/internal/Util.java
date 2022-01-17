@@ -1,10 +1,12 @@
 package io.hoek.neoauth2.internal;
 
+import io.hoek.neoauth2.ParamReader;
 import io.hoek.neoauth2.model.ErrorResponse;
 import lombok.SneakyThrows;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriBuilder;
+import java.net.Inet4Address;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -15,36 +17,10 @@ import java.util.List;
 
 public class Util {
 
-    private Util() {}
-
-    public static String maybeExtractSingletonParam(ParamReader params, String param) throws InvalidRequestException {
-        List<String> l = params.get(param);
-        if (l == null) {
-            return null;
-        }
-
-        Iterator<String> it = l.iterator();
-        if (!it.hasNext()) {
-            return null;
-        }
-
-        String s = it.next();
-        if (it.hasNext()) {
-            throw new InvalidRequestException(ErrorResponse.DESC_INVALID_REQUEST, "duplicate param '" + param + "'");
-        }
-
-        return s;
+    private Util() {
     }
 
-    public static String extractSingletonParam(ParamReader params, String param) throws InvalidRequestException {
-        String value = maybeExtractSingletonParam(params, param);
-        if (value == null) {
-            throw new InvalidRequestException(ErrorResponse.DESC_INVALID_REQUEST, "missing param '" + param + "'");
-        }
-
-        return value;
-    }
-
+    // We are intentionally too strict.
     public static boolean isLoopbackHost(String host) {
         host = host.toLowerCase();
         return host.equals("localhost") || host.equals("127.0.0.1") || host.equals("::1");
@@ -57,6 +33,10 @@ public class Util {
             return true;
         }
 
+        if (a.getHost() == null || b.getHost() == null) {
+            return false;
+        }
+
         return isLoopbackHost(a.getHost())
                 && isLoopbackHost(b.getHost())
                 && UriBuilder.fromUri(a)
@@ -65,7 +45,7 @@ public class Util {
                 .build().equals(b);
     }
 
-    public static String calculateRandomBytesBase64UrlEncodedWithoutPadding(SecureRandom random, int numBytes) {
+    public static String generateRandomBytesBase64UrlEncodedWithoutPadding(SecureRandom random, int numBytes) {
         byte[] raw = new byte[numBytes];
         random.nextBytes(raw);
         return calculateSha256Base64UrlEncodedWithoutPadding(raw);
@@ -84,11 +64,5 @@ public class Util {
 
     public static Response.ResponseBuilder addSecurityCacheControlHeaders(Response.ResponseBuilder builder) {
         return builder.header("Cache-Control", "no-store");
-    }
-
-    public static void assertCondition(boolean cond) {
-        if(!cond) {
-            throw new IllegalStateException("internal assertion failed!");
-        }
     }
 }

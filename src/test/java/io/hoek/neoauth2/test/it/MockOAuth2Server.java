@@ -3,23 +3,21 @@ package io.hoek.neoauth2.test.it;
 import com.google.common.io.CharStreams;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import io.hoek.neoauth2.endpoint.AuthorizationRequest;
-import io.hoek.neoauth2.endpoint.AuthorizationRequestParser;
-import io.hoek.neoauth2.endpoint.ReturnErrorResponseException;
-import io.hoek.neoauth2.endpoint.TokenRequest;
-import io.hoek.neoauth2.internal.ParamReader;
-import io.hoek.neoauth2.provider.IssuerBundle;
-import io.hoek.neoauth2.provider.RegistrationAuthority;
+import io.hoek.neoauth2.*;
+import io.hoek.neoauth2.backend.IssuerBundle;
+import io.hoek.neoauth2.backend.RegistrationAuthority;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
-import javax.ws.rs.core.*;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class MockOAuth2Server extends SimpleEphemeralServer {
@@ -28,28 +26,25 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
     public final String ENDPOINT_TOKEN = "/token";
 
     private final Configuration config;
+    private final List<AuthorizationRequestParser.Extension> extensions;
 
-    public interface Configuration {
-        IssuerBundle getIssuerBundle();
-
-        RegistrationAuthority getRegistrationAuthority();
-
-        String getSub();
-
-        void configureAuthorizationRequestParser(AuthorizationRequestParser parser);
-    }
-
-    public MockOAuth2Server(Configuration config) {
+    public MockOAuth2Server(Configuration config, List<AuthorizationRequestParser.Extension> extensions) {
         super();
 
         this.config = config;
+        this.extensions = extensions;
     }
 
     public static ParamReader readerFromNameValuePairs(List<NameValuePair> params) {
-        return param -> params.stream()
-                .filter(nv -> nv.getName().equalsIgnoreCase(param))
-                .map(NameValuePair::getValue)
-                .collect(Collectors.toUnmodifiableList());
+        return new ParamReader() {
+            @Override
+            public List<String> get(String param) {
+                return params.stream()
+                        .filter(nv -> nv.getName().equalsIgnoreCase(param))
+                        .map(NameValuePair::getValue)
+                        .collect(Collectors.toUnmodifiableList());
+            }
+        };
     }
 
     public static ParamReader readerFromUri(URI uri) {
@@ -60,44 +55,16 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
         return readerFromNameValuePairs(URLEncodedUtils.parse(query, StandardCharsets.UTF_8));
     }
 
-    public URI getAuthorizationUri() {
-        return getEndpointUri(ENDPOINT_AUTHORIZATION);
-    }
-
-    public URI getTokenUri() {
-        return getEndpointUri(ENDPOINT_TOKEN);
-    }
-
-    @Override
-    protected void setup(HttpServer server) {
-        server.createContext(ENDPOINT_AUTHORIZATION, exchange -> {
-            if(!exchange.getRequestMethod().equals("GET")) {
-                throw new RuntimeException("not a GET request");
-            }
-
-            setResponse(exchange, doEndpointAuthorization(readerFromUri(exchange.getRequestURI())));
-        });
-
-        server.createContext(ENDPOINT_TOKEN, exchange -> {
-            if(!exchange.getRequestMethod().equals("POST")) {
-                throw new RuntimeException("not a POST request");
-            }
-
-            setResponse(exchange,
-                    doEndpointToken(readerFromQueryString(CharStreams.toString(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)))));
-        });
-    }
-
     private static void setResponse(HttpExchange exchange, Response response) {
         byte[] body;
-        if(response.getEntity() != null) {
+        if (response.getEntity() != null) {
             // Brittle
             body = response.getEntity().toString().getBytes(StandardCharsets.UTF_8);
         } else {
             body = new byte[0];
         }
 
-        for(Map.Entry<String, List<Object>> header : response.getHeaders().entrySet()) {
+        for (Map.Entry<String, List<Object>> header : response.getHeaders().entrySet()) {
             exchange.getResponseHeaders().put(header.getKey(), header.getValue().stream()
                     .map(Object::toString) // Brittle
                     .collect(Collectors.toList()));
@@ -112,16 +79,51 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
         }
     }
 
+    public URI getAuthorizationUri() {
+        return getEndpointUri(ENDPOINT_AUTHORIZATION);
+    }
+
+    public URI getTokenUri() {
+        return getEndpointUri(ENDPOINT_TOKEN);
+    }
+
+    @Override
+    protected void setup(HttpServer server) {
+        server.createContext(ENDPOINT_AUTHORIZATION, exchange -> {
+            if (!exchange.getRequestMethod().equals("GET")) {
+                throw new RuntimeException("not a GET request");
+            }
+
+            setResponse(exchange, doEndpointAuthorization(readerFromUri(exchange.getRequestURI())));
+        });
+
+        server.createContext(ENDPOINT_TOKEN, exchange -> {
+            if (!exchange.getRequestMethod().equals("POST")) {
+                throw new RuntimeException("not a POST request");
+            }
+
+            setResponse(exchange,
+                    doEndpointToken(readerFromQueryString(CharStreams.toString(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)))));
+        });
+    }
+
     private Response doEndpointAuthorization(ParamReader params) {
         try {
             AuthorizationRequestParser parser = AuthorizationRequest.parser();
-            config.configureAuthorizationRequestParser(parser);
+            extensions.forEach(parser::addExtension);
 
             return parser
                     .parse(config.getRegistrationAuthority(), params)
-                    .generateAccessGrantedResponse(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub());
-        } catch (ReturnErrorResponseException e) {
-            return e.toResponse();
+                    .generateAccessGranted(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub())
+                    .getResponse();
+        } catch (WebApplicationException e) {
+            return e.getResponse();
+        } catch (Exception e) {
+            Logger.getLogger(MockOAuth2Server.class.getName()).severe(e.toString());
+            e.printStackTrace();
+
+            System.exit(1);
+            throw new InternalError();
         }
     }
 
@@ -129,9 +131,24 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
         try {
             return TokenRequest.parser()
                     .parse(config.getIssuerBundle(), params)
-                    .generateAccessGrantedResponse(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub());
-        } catch (ReturnErrorResponseException e) {
-            return e.toResponse();
+                    .generateAccessGranted(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub())
+                    .getResponse();
+        } catch (WebApplicationException e) {
+            return e.getResponse();
+        } catch (Exception e) {
+            Logger.getLogger(MockOAuth2Server.class.getName()).severe(e.toString());
+            e.printStackTrace();
+
+            System.exit(1);
+            throw new InternalError();
         }
+    }
+
+    public interface Configuration {
+        IssuerBundle<?, ?> getIssuerBundle();
+
+        RegistrationAuthority getRegistrationAuthority();
+
+        String getSub();
     }
 }

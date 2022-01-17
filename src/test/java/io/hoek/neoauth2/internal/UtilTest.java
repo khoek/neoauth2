@@ -1,5 +1,6 @@
 package io.hoek.neoauth2.internal;
 
+import io.hoek.neoauth2.ParamReader;
 import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.core.Response;
@@ -14,37 +15,37 @@ public class UtilTest {
     @Test
     public void testMaybeExtract() throws InvalidRequestException {
         assertNull(
-                Util.maybeExtractSingletonParam(param -> null, "x"));
+                ParamReader.from(param -> null).maybeExtractSingletonParam("x"));
         assertNull(
-                Util.maybeExtractSingletonParam(param -> List.of(), "y"));
+                ParamReader.from(param -> List.of()).maybeExtractSingletonParam("y"));
 
         assertEquals("bbb",
-                Util.maybeExtractSingletonParam(param -> param.equals("aaa") ? List.of("bbb") : List.of(), "aaa"));
+                ParamReader.from(param -> param.equals("aaa") ? List.of("bbb") : List.of()).maybeExtractSingletonParam("aaa"));
         assertNull(
-                Util.maybeExtractSingletonParam(param -> param.equals("aaa") ? List.of("bbb") : List.of(), "ccc"));
+                ParamReader.from(param -> param.equals("aaa") ? List.of("bbb") : List.of()).maybeExtractSingletonParam("ccc"));
 
         assertThrows(InvalidRequestException.class, () ->
-                Util.maybeExtractSingletonParam(param -> List.of("bbb", "bbb"), "aaa"));
+                ParamReader.from(param -> List.of("bbb", "bbb")).maybeExtractSingletonParam("aaa"));
         assertThrows(InvalidRequestException.class, () ->
-                Util.maybeExtractSingletonParam(param -> List.of("bbb", "ccc"), "aaa"));
+                ParamReader.from(param -> List.of("bbb", "ccc")).maybeExtractSingletonParam("aaa"));
     }
 
     @Test
     public void testExtract() throws InvalidRequestException {
         assertThrows(InvalidRequestException.class, () ->
-                Util.extractSingletonParam(param -> null, "x"));
+                ParamReader.from(param -> null).extractSingletonParam("x"));
         assertThrows(InvalidRequestException.class, () ->
-                Util.extractSingletonParam(param -> List.of(), "y"));
+                ParamReader.from(param -> List.of()).extractSingletonParam("y"));
 
         assertEquals("bbb",
-                Util.extractSingletonParam(param -> param.equals("aaa") ? List.of("bbb") : List.of(), "aaa"));
+                ParamReader.from(param -> param.equals("aaa") ? List.of("bbb") : List.of()).extractSingletonParam("aaa"));
         assertThrows(InvalidRequestException.class, () ->
-                Util.extractSingletonParam(param -> param.equals("aaa") ? List.of("bbb") : List.of(), "ccc"));
+                ParamReader.from(param -> param.equals("aaa") ? List.of("bbb") : List.of()).extractSingletonParam("ccc"));
 
         assertThrows(InvalidRequestException.class, () ->
-                Util.extractSingletonParam(param -> List.of("bbb", "bbb"), "aaa"));
+                ParamReader.from(param -> List.of("bbb", "bbb")).extractSingletonParam("aaa"));
         assertThrows(InvalidRequestException.class, () ->
-                Util.extractSingletonParam(param -> List.of("bbb", "ccc"), "aaa"));
+                ParamReader.from(param -> List.of("bbb", "ccc")).extractSingletonParam("aaa"));
     }
 
     @Test
@@ -68,18 +69,22 @@ public class UtilTest {
 
     @Test
     public void testUrisMatch() {
-        assertSymmetricMatch(true,"https://hoek.io:8080","https://hoek.io:8080");
-        assertSymmetricMatch(false,"https://hoek.io:8080","https://hoek.io:8080/test2");
-        assertSymmetricMatch(false,"https://hoek.io:8080","https://hoek.io:9090");
+        assertSymmetricMatch(true, "no/host", "no/host");
+        assertSymmetricMatch(false, "no/host", "no/host/another");
+        assertSymmetricMatch(false, "https://no/host", "no/host");
 
-        assertSymmetricMatch(true,"https://localhost","https://localhost:8080");
-        assertSymmetricMatch(true,"https://localhost:8080","https://localhost:8080");
-        assertSymmetricMatch(true,"https://LOCALHOST:8080","https://localhost:9090");
+        assertSymmetricMatch(true, "https://hoek.io:8080", "https://hoek.io:8080");
+        assertSymmetricMatch(false, "https://hoek.io:8080", "https://hoek.io:8080/test2");
+        assertSymmetricMatch(false, "https://hoek.io:8080", "https://hoek.io:9090");
 
-        assertSymmetricMatch(true,"https://127.0.0.1:8080","https://localhost:9090");
-        assertSymmetricMatch(false,"https://localhost:8080/test1","https://localhost:8080");
-        assertSymmetricMatch(false,"https://localhost:8080","https://hoek.io:8080");
-        assertSymmetricMatch(false,"https://hoek.io:8080","https://localhost:8080");
+        assertSymmetricMatch(true, "https://localhost", "https://localhost:8080");
+        assertSymmetricMatch(true, "https://localhost:8080", "https://localhost:8080");
+        assertSymmetricMatch(true, "https://LOCALHOST:8080", "https://localhost:9090");
+
+        assertSymmetricMatch(true, "https://127.0.0.1:8080", "https://localhost:9090");
+        assertSymmetricMatch(false, "https://localhost:8080/test1", "https://localhost:8080");
+        assertSymmetricMatch(false, "https://localhost:8080", "https://hoek.io:8080");
+        assertSymmetricMatch(false, "https://hoek.io:8080", "https://localhost:8080");
     }
 
     @Test
@@ -88,7 +93,7 @@ public class UtilTest {
                 Util.calculateSha256Base64UrlEncodedWithoutPadding("sdfasdfasdfasdfasdfasdddddssfasd"));
 
         assertEquals("x8PejGypC0FSjCkt4diQxSuuL6cTDSYBqeWT71OwXzk",
-                Util.calculateRandomBytesBase64UrlEncodedWithoutPadding(new SecureRandom() {
+                Util.generateRandomBytesBase64UrlEncodedWithoutPadding(new SecureRandom() {
                     @Override
                     public void nextBytes(byte[] bytes) {
                         System.arraycopy(new byte[]{
@@ -103,6 +108,7 @@ public class UtilTest {
 
     @Test
     public void testCacheControl() {
-        assertEquals("no-store", Util.addSecurityCacheControlHeaders(Response.ok()).build().getHeaderString("Cache-Control"));
+        assertEquals("no-store", Util.addSecurityCacheControlHeaders(Response.ok()).build()
+                .getHeaderString("Cache-Control"));
     }
 }

@@ -15,14 +15,12 @@ public enum CodeChallengeMethod {
 
     public String calculateChallenge(String codeVerifier) {
         switch (this) {
-            case PLAIN: {
+            case PLAIN:
                 return codeVerifier;
-            }
-            case S256: {
+            case S256:
                 return Util.calculateSha256Base64UrlEncodedWithoutPadding(codeVerifier);
-            }
+            default:
+                throw new UnsupportedOperationException();
         }
-
-        throw new UnsupportedOperationException();
     }
 }

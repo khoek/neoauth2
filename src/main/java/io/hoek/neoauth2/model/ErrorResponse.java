@@ -3,8 +3,10 @@ package io.hoek.neoauth2.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import io.hoek.neoauth2.internal.ParamWriter;
-import lombok.*;
+import io.hoek.neoauth2.ParamWriter;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.NotNull;
 
@@ -19,6 +21,7 @@ public class ErrorResponse implements ParamWriter.Writable {
 
     public static final String DESC_INVALID_REQUEST = "invalid_request";
     public static final String DESC_INVALID_GRANT = "invalid_grant";
+    public static final String DESC_INVALID_CLIENT = "invalid_client";
     public static final String DESC_UNAUTHORIZED_CLIENT = "unauthorized_client";
     public static final String DESC_ACCESS_DENIED = "access_denied";
     public static final String DESC_UNSUPPORTED_RESPONSE_TYPE = "unsupported_response_type";
@@ -45,5 +48,9 @@ public class ErrorResponse implements ParamWriter.Writable {
         if (state != null) {
             writer.set("state", state);
         }
+    }
+
+    public String toString() {
+        return error + " (" + errorMessage + ") " + (state != null ? " [" + state + "]" : "");
     }
 }

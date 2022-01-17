@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public enum GrantType {
 
-    // FIXME What else does OAuth2.1 allow?
+    // TODO Implement client credentials
 
     @JsonProperty("authorization_code")
     AUTHORIZATION_CODE,

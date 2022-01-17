@@ -1,28 +1,26 @@
 package io.hoek.neoauth2.test.it.cases;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.hoek.neoauth2.endpoint.AuthorizationRequestParser;
-import io.hoek.neoauth2.endpoint.ext.OAuth21SpecOptIn;
-import io.hoek.neoauth2.endpoint.ext.OAuth21SpecViolation;
+import io.hoek.neoauth2.AuthorizationRequestParser;
+import io.hoek.neoauth2.extension.OAuth21SpecOptIn;
+import io.hoek.neoauth2.extension.OAuth21SpecViolation;
 import io.hoek.neoauth2.internal.Util;
-import io.hoek.neoauth2.test.it.FlowProfiles;
-import io.hoek.neoauth2.test.it.FlowSimulator;
-import io.hoek.neoauth2.test.it.MockCredentials;
 import io.hoek.neoauth2.model.ErrorResponse;
+import io.hoek.neoauth2.test.MockCredentials;
+import io.hoek.neoauth2.test.Param;
+import io.hoek.neoauth2.test.it.Flows;
+import io.hoek.neoauth2.test.it.MockFlows;
 import org.jose4j.jwt.JwtClaims;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import javax.ws.rs.core.UriBuilder;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Collection;
 import java.util.List;
-import java.util.function.Function;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,14 +50,6 @@ public class AuthorizationCodeFlowPkceIT {
         );
     }
 
-    private static Stream<Arguments> getRequirePkceTestExtensions() {
-        return Stream.of(
-                Arguments.of(List.of()),
-                Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod()))
-        );
-    }
-
     private static Stream<Arguments> getPlainTestExtensions() {
         return Stream.of(
                 Arguments.of(List.of(
@@ -70,70 +60,54 @@ public class AuthorizationCodeFlowPkceIT {
         );
     }
 
-    private static Stream<Arguments> getNoPlainTestExtensions() {
-        return Stream.of(
-                Arguments.of(List.of()),
-                Arguments.of(List.of(
-                        OAuth21SpecViolation.dontRequirePkce()))
-        );
-    }
-
     @ParameterizedTest
     @MethodSource("getAllTestExtensions")
     public void testAuthorizationFlowWithPkceSuccess(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ObjectNode response = FlowSimulator.assertFlowSucceeds(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions));
-        FlowProfiles.assertAccessTokenValidClaims(response);
+        ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(extensions, MockFlows.StandardMockAuthorizationCodeFlow::new);
+        MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(response);
     }
 
     @ParameterizedTest
     @MethodSource("getAllTestExtensions")
-    public void testAuthorizationFlowWithPkceSuccessPlusNonce(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        String nonce = Util.calculateRandomBytesBase64UrlEncodedWithoutPadding(new SecureRandom(), 32);
+    public void testAuthorizationFlowWithPkceSuccessPlusStateAndNonce(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
+        String state = Util.generateRandomBytesBase64UrlEncodedWithoutPadding(new SecureRandom(), 32);
+        String nonce = Util.generateRandomBytesBase64UrlEncodedWithoutPadding(new SecureRandom(), 32);
 
-        Function<URI, FlowSimulator.Profile> profileBuilder = redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
+        ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(extensions, redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .queryParam("code_challenge_method", "S256")
-                        .queryParam("code_challenge", getCodeChallenge())
-                        .queryParam("nonce", nonce)
-                        .build();
+            public String getExpectedAuthorizationResponseState() {
+                return state;
             }
-        };
 
-        JwtClaims claims = FlowProfiles.assertAccessTokenValidClaims(FlowSimulator.assertFlowSucceeds(profileBuilder));
+            @Override
+            public Collection<Param> getAuthorizationEndpointParams() {
+                return Set.of(new Param("response_type", "code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", redirectUri.toString()),
+                        new Param("code_challenge_method", "S256"),
+                        new Param("code_challenge", getCodeChallenge()),
+                        new Param("state", state),
+                        new Param("nonce", nonce));
+            }
+        });
+
+        JwtClaims claims = MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(response);
+        // The returned value of 'state' is checked inside the `Flows` orchestrator because of our overridden
+        // `getExpectedAuthorizationResponseState()`.
         assertEquals(nonce, claims.getClaimValueAsString("nonce"));
     }
 
     @ParameterizedTest
     @MethodSource("getAllTestExtensions")
-    public void testAuthorizationFlowWithPkceMissingChallenge(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtAuthorizationEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
-            @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .queryParam("code_challenge_method", "S256")
-                        .build();
-            }
-        });
-
-        assertEquals(new ErrorResponse("invalid_request", "missing 'code_challenge'", null), er);
-    }
-
-    @ParameterizedTest
-    @MethodSource("getAllTestExtensions")
     public void testAuthorizationFlowWithPkceMissingVerifier(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(extensions, redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
+
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode(redirectUri.toString(), StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8);
+            public Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", redirectUri.toString()),
+                        new Param("code", code));
             }
         });
 
@@ -143,13 +117,14 @@ public class AuthorizationCodeFlowPkceIT {
     @ParameterizedTest
     @MethodSource("getAllTestExtensions")
     public void testAuthorizationFlowWithPkceMissingRedirectUri(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(extensions, redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
+
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            public Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -157,63 +132,40 @@ public class AuthorizationCodeFlowPkceIT {
     }
 
     @ParameterizedTest
-    @MethodSource("getNoPlainTestExtensions")
-    public void testAuthorizationFlowWithPkceNoMethodPlainNotEnabled(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtAuthorizationEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
-            @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .queryParam("code_challenge", getCodeChallenge()).build();
-            }
-
-            @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode(redirectUri.toString(), StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeChallenge(), StandardCharsets.UTF_8);
-            }
-        });
-
-        assertEquals(new ErrorResponse("invalid_request", "challenge code method 'plain' disallowed", null), er);
-    }
-
-    @ParameterizedTest
     @MethodSource("getPlainTestExtensions")
     public void testAuthorizationFlowWithPkceNoMethodPlainEnabled(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        FlowProfiles.assertAccessTokenValidClaims(FlowSimulator.assertFlowSucceeds(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
-            @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .queryParam("code_challenge", getCodeChallenge()).build();
-            }
+        MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(Flows.assertAuthorizationCodeFlowSucceeds(extensions,
+                redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
 
-            @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode(redirectUri.toString(), StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeChallenge(), StandardCharsets.UTF_8);
-            }
-        }));
+                    @Override
+                    public Collection<Param> getAuthorizationEndpointParams() {
+                        return Set.of(new Param("response_type", "code"),
+                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                                new Param("redirect_uri", redirectUri.toString()),
+                                new Param("code_challenge", getCodeChallenge()));
+                    }
+
+                    @Override
+                    public Collection<Param> getTokenEndpointParams(String code) {
+                        return Set.of(new Param("grant_type", "authorization_code"),
+                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                                new Param("redirect_uri", redirectUri.toString()),
+                                new Param("code", code),
+                                new Param("code_verifier", getCodeChallenge()));
+                    }
+                }));
     }
 
     @ParameterizedTest
     @MethodSource("getDontRequirePkceTestExtensions")
     public void testAuthorizationFlowWithPkceMissingChallengeAndMethodDontRequirePkce(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(extensions, redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
+
             @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .build();
+            public Collection<Param> getAuthorizationEndpointParams() {
+                return Set.of(new Param("response_type", "code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", redirectUri.toString()));
             }
         });
 
@@ -221,32 +173,16 @@ public class AuthorizationCodeFlowPkceIT {
     }
 
     @ParameterizedTest
-    @MethodSource("getRequirePkceTestExtensions")
-    public void testAuthorizationFlowWithPkceMissingChallengeAndMethodRequirePkce(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtAuthorizationEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
-            @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .build();
-            }
-        });
-
-        assertEquals(new ErrorResponse("invalid_request", "missing 'code_challenge'", null), er);
-    }
-
-    @ParameterizedTest
     @MethodSource("getAllTestExtensions")
     public void testAuthorizationFlowWithPkceWrongVerifierIsChallengeInstead(List<AuthorizationRequestParser.Extension> extensions) throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri, extensions) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(extensions, redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode(redirectUri.toString(), StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeChallenge(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", redirectUri.toString()),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeChallenge()));
             }
         });
 
@@ -255,23 +191,24 @@ public class AuthorizationCodeFlowPkceIT {
 
     @Test
     public void testAuthorizationFlowSuccessNoPkce() throws IOException {
-        FlowProfiles.assertAccessTokenValidClaims(FlowSimulator.assertFlowSucceeds(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri,
-                OAuth21SpecViolation.dontRequirePkce()) {
-            @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("redirect_uri", redirectUri)
-                        .build();
-            }
+        MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(Flows.assertAuthorizationCodeFlowSucceeds(
+                List.of(OAuth21SpecViolation.dontRequirePkce()),
+                redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
 
-            @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode(redirectUri.toString(), StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8);
-            }
-        }));
+                    @Override
+                    public Collection<Param> getAuthorizationEndpointParams() {
+                        return Set.of(new Param("response_type", "code"),
+                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                                new Param("redirect_uri", redirectUri.toString()));
+                    }
+
+                    @Override
+                    protected Collection<Param> getTokenEndpointParams(String code) {
+                        return Set.of(new Param("grant_type", "authorization_code"),
+                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                                new Param("redirect_uri", redirectUri.toString()),
+                                new Param("code", code));
+                    }
+                }));
     }
 }

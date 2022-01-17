@@ -1,6 +1,7 @@
 package io.hoek.neoauth2.test.it;
 
 import com.sun.net.httpserver.HttpServer;
+import io.hoek.neoauth2.test.TestUtil;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
@@ -8,9 +9,7 @@ import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
 
 public class RedirectionCaptureServer extends SimpleEphemeralServer {
 
@@ -18,9 +17,8 @@ public class RedirectionCaptureServer extends SimpleEphemeralServer {
 
     private final String errorIfHeaderMissing;
     private final boolean expectError;
-
-    private boolean wasCaptureAsExpected = false;
     private final Semaphore sem = new Semaphore(0);
+    private boolean wasCaptureAsExpected = false;
     private List<NameValuePair> params = null;
 
     public RedirectionCaptureServer(boolean expectError, String errorIfHeaderMissing) {
@@ -39,21 +37,8 @@ public class RedirectionCaptureServer extends SimpleEphemeralServer {
         stop();
     }
 
-    public String getResponseParam(String param) {
-        Set<String> values = params.stream()
-                .filter(nv -> nv.getName().equalsIgnoreCase(param))
-                .map(NameValuePair::getValue)
-                .collect(Collectors.toUnmodifiableSet());
-
-        if (values.size() == 0) {
-            return null;
-        }
-
-        if (values.size() != 1) {
-            throw new RuntimeException("multiple values for param: " + param);
-        }
-
-        return values.iterator().next();
+    public List<NameValuePair> getResponseParams() {
+        return params;
     }
 
     private String buildAutoClosingPage(String body) {
@@ -76,16 +61,16 @@ public class RedirectionCaptureServer extends SimpleEphemeralServer {
 
             exchange.sendResponseHeaders(200, 0);
             OutputStreamWriter doc = new OutputStreamWriter(exchange.getResponseBody(), StandardCharsets.UTF_8);
-            if (getResponseParam("error") != null
-                    || (errorIfHeaderMissing != null && getResponseParam(errorIfHeaderMissing) == null)) {
-                if(expectError) {
+            if (TestUtil.getSingleParam(params, "error") != null
+                    || (errorIfHeaderMissing != null && TestUtil.getSingleParam(params, errorIfHeaderMissing) == null)) {
+                if (expectError) {
                     doc.write(buildAutoClosingPage("Expected error occurred (yay)"));
                     wasCaptureAsExpected = true;
                 } else {
                     doc.write(buildStandardPage("Unexpected error! (fail)"));
                 }
             } else {
-                if(expectError) {
+                if (expectError) {
                     doc.write(buildStandardPage("Unexpected success! (fail)"));
                 } else {
                     doc.write(buildAutoClosingPage("Success (yay)"));

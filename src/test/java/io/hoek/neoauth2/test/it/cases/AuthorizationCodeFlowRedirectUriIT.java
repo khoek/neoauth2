@@ -1,21 +1,20 @@
 package io.hoek.neoauth2.test.it.cases;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.hoek.neoauth2.backend.RegistrationAuthority;
 import io.hoek.neoauth2.model.ErrorResponse;
-import io.hoek.neoauth2.provider.RegistrationAuthority;
-import io.hoek.neoauth2.test.it.FlowProfiles;
-import io.hoek.neoauth2.test.it.FlowSimulator;
-import io.hoek.neoauth2.test.it.MockCredentials;
+import io.hoek.neoauth2.test.MockCredentials;
+import io.hoek.neoauth2.test.Param;
+import io.hoek.neoauth2.test.it.Flows;
+import io.hoek.neoauth2.test.it.MockFlows;
 import lombok.NonNull;
 import org.junit.jupiter.api.Test;
 
-import javax.ws.rs.core.UriBuilder;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -23,14 +22,26 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriWrongAtTokenEndpoint() throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
+            private static final String BAD_REDIRECT_URI = "https://agentborris.com/legendary";
+
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode("https://agentborris.com/legendary", StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            public RegistrationAuthority getRegistrationAuthority() {
+                return clientId -> new MockCredentials.MockClientInfo() {
+                    @Override
+                    public @NonNull Collection<URI> getAllowedRedirectUris() {
+                        return List.of(redirectUri, URI.create(BAD_REDIRECT_URI));
+                    }
+                };
+            }
+
+            @Override
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", BAD_REDIRECT_URI),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -39,14 +50,14 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriMalformedAtTokenEndpoint() throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode("?||/???OMGLOL!!!", StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", "?||/???OMGLOL!!!"),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -55,7 +66,7 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriWrongAtTokenEndpointUsingDefault() throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
             public RegistrationAuthority getRegistrationAuthority() {
                 return clientId -> new MockCredentials.MockClientInfo() {
@@ -67,21 +78,20 @@ public class AuthorizationCodeFlowRedirectUriIT {
             }
 
             @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("code_challenge_method", "S256")
-                        .queryParam("code_challenge", getCodeChallenge())
-                        .build();
+            public Collection<Param> getAuthorizationEndpointParams() {
+                return Set.of(new Param("response_type", "code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code_challenge_method", "S256"),
+                        new Param("code_challenge", getCodeChallenge()));
             }
 
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&redirect_uri=" + URLEncoder.encode("https://agentborris.com/legendary", StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("redirect_uri", "https://agentborris.com/legendary"),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -90,7 +100,7 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriSuccessUsingDefaultButExplicitAtToken() throws IOException {
-        ObjectNode response = FlowSimulator.assertFlowSucceeds(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
             public RegistrationAuthority getRegistrationAuthority() {
                 return clientId -> new MockCredentials.MockClientInfo() {
@@ -102,27 +112,26 @@ public class AuthorizationCodeFlowRedirectUriIT {
             }
 
             @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("code_challenge_method", "S256")
-                        .queryParam("code_challenge", getCodeChallenge())
-                        .build();
+            public Collection<Param> getAuthorizationEndpointParams() {
+                return Set.of(new Param("response_type", "code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code_challenge_method", "S256"),
+                        new Param("code_challenge", getCodeChallenge()));
             }
         });
 
-        FlowProfiles.assertAccessTokenValidClaims(response);
+        MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(response);
     }
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriMissingAtToken() throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -131,7 +140,7 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriMissingAtTokenEvenThoughIsDefault() throws IOException {
-        ErrorResponse er = FlowSimulator.assertFlowFailsAtTokenEndpoint(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
             public RegistrationAuthority getRegistrationAuthority() {
                 return clientId -> new MockCredentials.MockClientInfo() {
@@ -143,11 +152,11 @@ public class AuthorizationCodeFlowRedirectUriIT {
             }
 
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
@@ -156,7 +165,7 @@ public class AuthorizationCodeFlowRedirectUriIT {
 
     @Test
     public void testAuthorizationCodeFlowRedirectUriSuccessOmittedAtTokenButUsingDefault() throws IOException {
-        ObjectNode response = FlowSimulator.assertFlowSucceeds(redirectUri -> new FlowProfiles.StandardPkceFlow(redirectUri) {
+        ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
             public RegistrationAuthority getRegistrationAuthority() {
                 return clientId -> new MockCredentials.MockClientInfo() {
@@ -168,23 +177,22 @@ public class AuthorizationCodeFlowRedirectUriIT {
             }
 
             @Override
-            public URI buildEndpointParamsForAuthorization(URI authorizationUri) {
-                return UriBuilder.fromUri(authorizationUri).queryParam("response_type", "code")
-                        .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
-                        .queryParam("code_challenge_method", "S256")
-                        .queryParam("code_challenge", getCodeChallenge())
-                        .build();
+            public Collection<Param> getAuthorizationEndpointParams() {
+                return Set.of(new Param("response_type", "code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code_challenge_method", "S256"),
+                        new Param("code_challenge", getCodeChallenge()));
             }
 
             @Override
-            public String buildEndpointParamsForToken(String code) {
-                return "grant_type=authorization_code"
-                        + "&client_id=" + URLEncoder.encode(MockCredentials.DEFAULT_CLAIM_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                        + "&code_verifier=" + URLEncoder.encode(getCodeVerifier(), StandardCharsets.UTF_8);
+            protected Collection<Param> getTokenEndpointParams(String code) {
+                return Set.of(new Param("grant_type", "authorization_code"),
+                        new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
+                        new Param("code", code),
+                        new Param("code_verifier", getCodeVerifier()));
             }
         });
 
-        FlowProfiles.assertAccessTokenValidClaims(response);
+        MockCredentials.assertAccessTokenClaimsValidForDefaultIssuer(response);
     }
 }
