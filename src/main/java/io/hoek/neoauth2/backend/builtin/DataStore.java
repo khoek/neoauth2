@@ -6,9 +6,7 @@ import lombok.With;
 
 import java.time.Instant;
 
-public interface DataStore {
-    int MAX_EXPIRES_IN_SECS = 10 * 60;
-
+public interface DataStore<T> {
     /**
      * Returns an {@code Entry} previously assigned to {@code key} or {@code null} if no such value exists/the value has
      * expired. The returned {@code Entry}'s access count is updated and is {@code AccessCount.SUBSEQUENT} upon all

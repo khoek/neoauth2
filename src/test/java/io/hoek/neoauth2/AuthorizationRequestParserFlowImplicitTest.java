@@ -1,7 +1,5 @@
 package io.hoek.neoauth2;
 
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
-import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
 import io.hoek.neoauth2.extension.OAuth21SpecViolation;
 import io.hoek.neoauth2.model.ErrorResponse;
 import io.hoek.neoauth2.test.MockCredentials;
@@ -52,35 +50,18 @@ public class AuthorizationRequestParserFlowImplicitTest {
                 .map(list -> Arguments.of(list.toArray()));
     }
 
-    @ParameterizedTest
-    @MethodSource("getRequireNonceTestExtensions")
-    public void testImplicitMissingNonceRequiredFail(List<AuthorizationRequestParser.Extension> extensions) {
-        String state = TestUtil.getRandom32Bytes();
-
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
-                AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
-                        new Param.MockReader(List.of(new Param("response_type", "token"),
-                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
-                                new Param("redirect_uri", "http://localhost/redirect_endpoint"),
-                                new Param("state", state)
-                        )))).getContent();
-
-        assertEquals(new ErrorResponse("invalid_request", "parameter 'nonce' required for implicit grant", state), er);
-    }
-
     @Test
     public void testImplicitMissingNonceAllowedSuccess() {
         String state = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest response = assertDoesNotThrow(() ->
                 AuthorizationRequest.parser().addExtension(OAuth21SpecViolation.allowImplicit(false)).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "token"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", DEFAULT_REDIRECT_URI.toString()),
                                 new Param("state", state)
-                        ))));
+                        )))).getRequest();
 
         assertEquals(new AuthorizationRequest.Implicit(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -94,12 +75,12 @@ public class AuthorizationRequestParserFlowImplicitTest {
 
     @ParameterizedTest
     @MethodSource("getRequireNonceTestExtensions")
-    public void testImplicitFailPreservesState(List<AuthorizationRequestParser.Extension> extensions) {
+    public void testImplicitFailsAndPreservesState(List<AuthorizationRequestParser.Extension> extensions) {
         String state = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er =(ErrorResponse)  assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "token"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", DEFAULT_REDIRECT_URI.toString()),
@@ -117,12 +98,12 @@ public class AuthorizationRequestParserFlowImplicitTest {
 
         AuthorizationRequest response = assertDoesNotThrow(() ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "token"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", DEFAULT_REDIRECT_URI.toString()),
                                 new Param("state", state),
-                                new Param("nonce", nonce)))));
+                                new Param("nonce", nonce))))).getRequest();
 
         assertEquals(new AuthorizationRequest.Implicit(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -139,9 +120,9 @@ public class AuthorizationRequestParserFlowImplicitTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "token"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", DEFAULT_REDIRECT_URI.toString()),
@@ -157,9 +138,9 @@ public class AuthorizationRequestParserFlowImplicitTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(Stream.concat(Stream.of(
                                                 new Param("response_type", "token"),
                                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),

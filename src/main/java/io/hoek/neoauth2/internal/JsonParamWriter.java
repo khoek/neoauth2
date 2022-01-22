@@ -2,7 +2,6 @@ package io.hoek.neoauth2.internal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.hoek.neoauth2.ParamWriter;
 import lombok.SneakyThrows;
 
 public final class JsonParamWriter extends ParamWriter<String> {

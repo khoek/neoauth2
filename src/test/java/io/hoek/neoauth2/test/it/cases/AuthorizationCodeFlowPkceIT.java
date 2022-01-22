@@ -2,7 +2,7 @@ package io.hoek.neoauth2.test.it.cases;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.hoek.neoauth2.AuthorizationRequestParser;
-import io.hoek.neoauth2.extension.OAuth21SpecOptIn;
+import io.hoek.neoauth2.extension.OAuth21SpecOption;
 import io.hoek.neoauth2.extension.OAuth21SpecViolation;
 import io.hoek.neoauth2.internal.Util;
 import io.hoek.neoauth2.model.ErrorResponse;
@@ -31,11 +31,11 @@ public class AuthorizationCodeFlowPkceIT {
         return Stream.of(
                 Arguments.of(List.of()),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod())),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod())),
                 Arguments.of(List.of(
                         OAuth21SpecViolation.dontRequirePkce())),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod(),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod(),
                         OAuth21SpecViolation.dontRequirePkce()))
         );
     }
@@ -45,7 +45,7 @@ public class AuthorizationCodeFlowPkceIT {
                 Arguments.of(List.of(
                         OAuth21SpecViolation.dontRequirePkce())),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod(),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod(),
                         OAuth21SpecViolation.dontRequirePkce()))
         );
     }
@@ -53,9 +53,9 @@ public class AuthorizationCodeFlowPkceIT {
     private static Stream<Arguments> getPlainTestExtensions() {
         return Stream.of(
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod())),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod())),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod(),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod(),
                         OAuth21SpecViolation.dontRequirePkce()))
         );
     }

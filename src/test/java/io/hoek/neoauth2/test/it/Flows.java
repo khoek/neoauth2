@@ -14,6 +14,7 @@ import io.hoek.neoauth2.test.TestUtil;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.SneakyThrows;
 import org.apache.http.NameValuePair;
 
 import javax.ws.rs.core.UriBuilder;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class Flows {
+
     private Flows() {
     }
 
@@ -191,6 +193,7 @@ public class Flows {
 
     @Data
     public static class TokenEndpointResponse {
+
         private final int httpCode;
         private final ObjectNode response;
 
@@ -205,39 +208,37 @@ public class Flows {
     }
 
     public static class TokenEndpoint {
+
         private final URI endpointUri;
 
         public TokenEndpoint(URI endpointUri) {
             this.endpointUri = endpointUri;
         }
 
+        @SneakyThrows(IOException.class)
         public TokenEndpointResponse performRequest(Collection<Param> params) {
+            HttpRequest request = new NetHttpTransport().createRequestFactory()
+                    .buildPostRequest(new GenericUrl(endpointUri), ByteArrayContent.fromString("application/x-www-form-urlencoded", buildPostBodyParams(params)));
+
+            int httpCode;
+            String body;
             try {
-                HttpRequest request = new NetHttpTransport().createRequestFactory()
-                        .buildPostRequest(new GenericUrl(endpointUri), ByteArrayContent.fromString("application/x-www-form-urlencoded", buildPostBodyParams(params)));
-
-                int httpCode;
-                String body;
-                try {
-                    HttpResponse response = request.execute();
-                    httpCode = response.getStatusCode();
-                    body = CharStreams.toString(new InputStreamReader(response.getContent(), StandardCharsets.UTF_8));
-                    response.disconnect();
-                } catch (HttpResponseException ex) {
-                    httpCode = ex.getStatusCode();
-                    body = ex.getContent();
-                }
-
-                return new TokenEndpointResponse(httpCode, new ObjectMapper().readValue(body, ObjectNode.class));
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
+                HttpResponse response = request.execute();
+                httpCode = response.getStatusCode();
+                body = CharStreams.toString(new InputStreamReader(response.getContent(), StandardCharsets.UTF_8));
+                response.disconnect();
+            } catch (HttpResponseException ex) {
+                httpCode = ex.getStatusCode();
+                body = ex.getContent();
             }
-        }
 
+            return new TokenEndpointResponse(httpCode, new ObjectMapper().readValue(body, ObjectNode.class));
+        }
     }
 
     @Getter
     private static class AuthorizationStepResult<Flow extends AuthorizationFlowPhase> {
+
         private final MockOAuth2Server server;
 
         private final Flow flow;

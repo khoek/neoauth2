@@ -1,6 +1,6 @@
 package io.hoek.neoauth2.model;
 
-import io.hoek.neoauth2.ParamWriter;
+import io.hoek.neoauth2.internal.ParamWriter;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -18,7 +18,7 @@ public final class AccessTokenPayload implements ParamWriter.Writable {
     private final List<String> scopes;
 
     @Override
-    public void writeTo(ParamWriter writer) {
+    public void writeTo(ParamWriter<?> writer) {
         writer.set("access_token", accessToken);
         writer.set("token_type", tokenType);
         writer.set("expires_in", expireInSeconds);

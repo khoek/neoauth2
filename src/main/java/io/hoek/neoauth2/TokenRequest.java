@@ -1,18 +1,13 @@
 package io.hoek.neoauth2;
 
-import io.hoek.neoauth2.backend.AccessTokenIssuer;
-import io.hoek.neoauth2.backend.AccessTokenOrder;
-import io.hoek.neoauth2.backend.AuthorizationCodeOrder;
-import io.hoek.neoauth2.backend.RegistrationAuthority;
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
-import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
+import io.hoek.neoauth2.backend.*;
 import io.hoek.neoauth2.internal.InvalidRequestException;
+import io.hoek.neoauth2.internal.ParamWriter;
 import io.hoek.neoauth2.model.ErrorResponse;
 import io.hoek.neoauth2.model.GrantType;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-import javax.ws.rs.core.Response;
 import java.util.List;
 
 @ToString
@@ -41,20 +36,7 @@ public abstract class TokenRequest {
 
     public abstract GrantType getGrantType();
 
-    protected abstract ParamWriter.Writable generateAccessGrantedResponseWritable(AccessTokenIssuer issuer, String sub, RegistrationAuthority.ClientInfo client) throws InvalidRequestException;
-
-    public final WritableWebApplicationException.JsonPage generateAccessGranted(AccessTokenIssuer issuer, RegistrationAuthority registrationAuthority) {
-        return generateAccessGranted(issuer, registrationAuthority, null);
-    }
-
-    public final WritableWebApplicationException.JsonPage generateAccessGranted(AccessTokenIssuer issuer, RegistrationAuthority registrationAuthority, String sub) {
-        try {
-            return new WritableWebApplicationException.JsonPage(Response.Status.OK,
-                    generateAccessGrantedResponseWritable(issuer, sub, registrationAuthority.lookupClientId(getClientId())));
-        } catch (InvalidRequestException ex) {
-            return ex.toErrorPageException();
-        }
-    }
+    abstract ParamWriter.Writable generateAccessGrantedWritable(AccessTokenIssuer issuer, ClientRegistration client) throws InvalidRequestException;
 
     // FIXME How to do accessDenied?
 
@@ -62,10 +44,10 @@ public abstract class TokenRequest {
     @EqualsAndHashCode(callSuper = true)
     public static final class AuthorizationCode extends TokenRequest {
 
-        private final AuthorizationCodeOrder code;
+        private final UserAuthorization code;
 
-        AuthorizationCode(AuthorizationCodeOrder code) {
-            super(code.getClientId(), code.getScopes());
+        AuthorizationCode(UserAuthorization code) {
+            super(code.getSpec().getClientId(), code.getSpec().getScopes());
 
             this.code = code;
         }
@@ -75,23 +57,60 @@ public abstract class TokenRequest {
             return GrantType.AUTHORIZATION_CODE;
         }
 
-        public AuthorizationCodeOrder getCode() {
+        public UserAuthorization getCode() {
             return code;
         }
 
         @Override
-        protected ParamWriter.Writable generateAccessGrantedResponseWritable(AccessTokenIssuer issuer, String sub, RegistrationAuthority.ClientInfo client) throws InvalidRequestException {
+        protected ParamWriter.Writable generateAccessGrantedWritable(AccessTokenIssuer issuer, ClientRegistration client) throws InvalidRequestException {
             String aud = client.validateScopesAndGetAudience(getScopes());
             if (aud == null) {
                 throw new InvalidRequestException(ErrorResponse.DESC_INVALID_SCOPE, "scopes not authorized");
             }
 
-            if (sub != null && getCode().getSub() != null && !sub.equals(getCode().getSub())) {
-                throw new IllegalArgumentException("mismatched sub: argument='" + sub + "' vs codeOrder='" + getCode().getSub() + "'");
+            // FIXME delete?
+            //            if (sub != null && !sub.equals(getCode().getSub())) {
+            //                throw new IllegalArgumentException("mismatched sub: argument='" + sub + "' vs codeOrder='" + getCode().getSub() + "'");
+            //            }
+            //
+            //            if (customClaims != null && !CollectionUtils.isEqualCollection(customClaims.entrySet(), getCode().getCustomClaims().entrySet())) {
+            //                throw new IllegalArgumentException("mismatched customClaims: argument='" + customClaims + "' vs codeOrder='" + getCode().getCustomClaims() + "'");
+            //            }
+
+            return issuer.issueAccessToken(new AccessTokenOrder(getCode().getSpec(), client.getAccessTokenLifetimeSeconds()));
+        }
+    }
+
+    @ToString(callSuper = true)
+    @EqualsAndHashCode(callSuper = true)
+    public static final class ClientCredentials extends TokenRequest {
+
+        ClientCredentials(String clientId, List<String> scopes) {
+            super(clientId, scopes);
+        }
+
+        @Override
+        public GrantType getGrantType() {
+            return GrantType.CLIENT_CREDENTIALS;
+        }
+
+        @Override
+        protected ParamWriter.Writable generateAccessGrantedWritable(AccessTokenIssuer issuer, ClientRegistration client) throws InvalidRequestException {
+            String aud = client.validateScopesAndGetAudience(getScopes());
+            if (aud == null) {
+                throw new InvalidRequestException(ErrorResponse.DESC_INVALID_SCOPE, "scopes not authorized");
             }
 
-            return issuer.issueAccessToken(
-                    new AccessTokenOrder(getCode().getSub(), aud, getScopes(), client.getAccessTokenLifetimeSeconds(), getClientId(), getCode().getNonce()));
+            if(!(client instanceof UserRegistration)) {
+                throw new IllegalArgumentException("provided ClientRegistration does not implement UserRegistration: 'client_credentials' grant disabled");
+            }
+
+            return issuer.issueAccessToken(new AccessTokenOrder(TokenSpec.from(
+                    client,
+                    (UserRegistration) client,
+                    getClientId(),
+                    getScopes(),
+                    null), client.getAccessTokenLifetimeSeconds()));
         }
     }
 }

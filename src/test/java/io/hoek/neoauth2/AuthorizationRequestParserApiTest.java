@@ -47,14 +47,14 @@ public class AuthorizationRequestParserApiTest {
         String codeChallenge = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser()
-                .parse(MockCredentials.DEFAULT_REGISTRATION_AUTHORITY, new ResteasyUriInfo(
+                .parse(MockCredentials.DEFAULT_CLIENT_REGISTRATION, new ResteasyUriInfo(
                         UriBuilder.fromUri("https://auth.example.com/authorization")
                                 .queryParam("response_type", "code")
                                 .queryParam("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID)
                                 .queryParam("redirect_uri", MockCredentials.DEFAULT_REDIRECT_URI.toString())
                                 .queryParam("code_challenge_method", "S256")
                                 .queryParam("code_challenge",  codeChallenge)
-                                .build())));
+                                .build()))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,

@@ -1,9 +1,7 @@
 package io.hoek.neoauth2;
 
 import com.google.common.collect.Streams;
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
-import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
-import io.hoek.neoauth2.extension.OAuth21SpecOptIn;
+import io.hoek.neoauth2.extension.OAuth21SpecOption;
 import io.hoek.neoauth2.extension.OAuth21SpecViolation;
 import io.hoek.neoauth2.model.CodeChallengeMethod;
 import io.hoek.neoauth2.model.ErrorResponse;
@@ -33,11 +31,11 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         return Stream.of(
                 Arguments.of(List.of()),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod())),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod())),
                 Arguments.of(List.of(
                         OAuth21SpecViolation.dontRequirePkce())),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod(),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod(),
                         OAuth21SpecViolation.dontRequirePkce()))
         );
     }
@@ -46,7 +44,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         return Stream.of(
                 Arguments.of(List.of()),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod()))
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod()))
         );
     }
 
@@ -55,7 +53,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                 Arguments.of(List.of(
                         OAuth21SpecViolation.dontRequirePkce())),
                 Arguments.of(List.of(
-                        OAuth21SpecOptIn.allowPlainCodeChallengeMethod(),
+                        OAuth21SpecOption.allowPlainCodeChallengeMethod(),
                         OAuth21SpecViolation.dontRequirePkce()))
         );
     }
@@ -103,14 +101,13 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String codeChallenge = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser()
-                .addExtensions(allowPlain ? List.of(OAuth21SpecOptIn.allowPlainCodeChallengeMethod()) : List.of())
-                .parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
-                            @Override
-                            public @NonNull Collection<URI> getAllowedRedirectUris() {
-                                return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
-                            }
-                        },
+                .addExtensions(allowPlain ? List.of(OAuth21SpecOption.allowPlainCodeChallengeMethod()) : List.of())
+                .parse(new MockCredentials.MockClientRegistration() {
+                           @Override
+                           public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
+                               return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
+                           }
+                       },
                         new Param.MockReader(Stream.concat(
                                 Streams.concat(Stream.of(
                                                 new Param("response_type", "code"),
@@ -124,7 +121,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                                 Stream.concat(
                                         state == null ? Stream.of() : Stream.of(new Param("state", state)),
                                         nonce == null ? Stream.of() : Stream.of(new Param("nonce", nonce)))
-                        ).collect(Collectors.toUnmodifiableList()))));
+                        ).collect(Collectors.toUnmodifiableList())))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -141,13 +138,12 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
     @MethodSource("getSuccessNoPkceArgs")
     public void testSuccessNoPkce(List<AuthorizationRequestParser.Extension> extensions, String state, String nonce) {
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser().addExtensions(extensions)
-                .parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
-                            @Override
-                            public @NonNull Collection<URI> getAllowedRedirectUris() {
-                                return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
-                            }
-                        },
+                .parse(new MockCredentials.MockClientRegistration() {
+                           @Override
+                           public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
+                               return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
+                           }
+                       },
                         new Param.MockReader(Streams.concat(
                                 Stream.of(
                                         new Param("response_type", "code"),
@@ -156,7 +152,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                                 Stream.concat(
                                         state == null ? Stream.of() : Stream.of(new Param("state", state)),
                                         nonce == null ? Stream.of() : Stream.of(new Param("nonce", nonce)))
-                        ).collect(Collectors.toUnmodifiableList()))));
+                        ).collect(Collectors.toUnmodifiableList())))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -176,9 +172,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String nonce = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser().parse(
-                clientId -> new MockCredentials.MockClientInfo() {
+                new MockCredentials.MockClientRegistration() {
                     @Override
-                    public @NonNull Collection<URI> getAllowedRedirectUris() {
+                    public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                         return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
                     }
                 },
@@ -191,7 +187,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                         new Param("scope", "XXXSCOPE1 scope2"),
                         new Param("state", state),
                         new Param("nonce", nonce)
-                ).collect(Collectors.toUnmodifiableList()))));
+                ).collect(Collectors.toUnmodifiableList())))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -209,9 +205,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -227,34 +223,13 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
     }
 
     @Test
-    public void testFailUnregisteredClient() {
-        String state = TestUtil.getRandom32Bytes();
-        String nonce = TestUtil.getRandom32Bytes();
-
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                AuthorizationRequest.parser().parse(
-                        clientId -> null,
-                        new Param.MockReader(List.of(
-                                new Param("response_type", "code"),
-                                new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
-                                new Param("redirect_uri", "http://localhost/redirect_endpoint"),
-                                new Param("code_challenge_method", "S256"),
-                                new Param("code_challenge", TestUtil.getRandom32Bytes()),
-                                new Param("state", state),
-                                new Param("nonce", nonce)))))
-                .getContent();
-
-        assertEquals(new ErrorResponse("invalid_client", "client unknown", state), er);
-    }
-
-    @Test
     public void testFailUnknownResponseType() {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("response_type", "anewone_special"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -273,9 +248,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -285,7 +260,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                                 new Param("nonce", nonce)))))
                 .getContent();
 
-        assertEquals(new ErrorResponse("invalid_request", "missing 'response_type'", state), er);
+        assertEquals(new ErrorResponse("invalid_request", "missing param 'response_type'", state), er);
     }
 
     @Test
@@ -293,9 +268,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
+                        new MockCredentials.MockClientRegistration() {
                             @Override
                             public List<String> getDefaultScopes() {
                                 return null;
@@ -319,9 +294,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -331,7 +306,7 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
                                 new Param("nonce", nonce)
                         )))).getContent();
 
-        assertEquals(new ErrorResponse("invalid_request", "missing 'response_type'", state), er);
+        assertEquals(new ErrorResponse("invalid_request", "missing param 'response_type'", state), er);
     }
 
     @Test
@@ -339,9 +314,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "fancypants"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -359,9 +334,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -383,9 +358,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -404,9 +379,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -424,9 +399,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),
@@ -444,9 +419,9 @@ public class AuthorizationRequestParserFlowAuthorizationCodeTest {
         String state = TestUtil.getRandom32Bytes();
         String nonce = TestUtil.getRandom32Bytes();
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.Redirect.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.Redirect.class, () ->
                 AuthorizationRequest.parser().addExtensions(extensions).parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", "http://localhost/redirect_endpoint"),

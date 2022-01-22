@@ -1,14 +1,13 @@
 package io.hoek.neoauth2.internal;
 
-import io.hoek.neoauth2.ParamWriter;
-
 import javax.ws.rs.core.UriBuilder;
 import java.net.URI;
 
-public final class UriBuilderQueryParamWriter extends ParamWriter<URI> {
+public final class UriQueryParamWriter extends ParamWriter<URI> {
+
     private final UriBuilder builder;
 
-    public UriBuilderQueryParamWriter(URI uri) {
+    public UriQueryParamWriter(URI uri) {
         this.builder = UriBuilder.fromUri(uri);
     }
 

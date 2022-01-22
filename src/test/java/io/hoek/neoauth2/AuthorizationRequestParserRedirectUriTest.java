@@ -1,7 +1,5 @@
 package io.hoek.neoauth2;
 
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
-import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
 import io.hoek.neoauth2.model.CodeChallengeMethod;
 import io.hoek.neoauth2.model.ErrorResponse;
 import io.hoek.neoauth2.model.PkceInfo;
@@ -45,9 +43,9 @@ public class AuthorizationRequestParserRedirectUriTest {
 
     @Test
     public void testRedirectUriFailMalformed() {
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -61,9 +59,9 @@ public class AuthorizationRequestParserRedirectUriTest {
 
     @Test
     public void testRedirectUriFailNotRegistered() {
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        MockCredentials.DEFAULT_REGISTRATION_AUTHORITY,
+                        MockCredentials.DEFAULT_CLIENT_REGISTRATION,
                         new Param.MockReader(List.of(
                                 new Param("response_type", "code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -80,9 +78,9 @@ public class AuthorizationRequestParserRedirectUriTest {
         String codeChallenge = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser().parse(
-                clientId -> new MockCredentials.MockClientInfo() {
+                new MockCredentials.MockClientRegistration() {
                     @Override
-                    public @NonNull Collection<URI> getAllowedRedirectUris() {
+                    public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                         return List.of(MockCredentials.DEFAULT_REDIRECT_URI);
                     }
                 },
@@ -90,7 +88,7 @@ public class AuthorizationRequestParserRedirectUriTest {
                         new Param("response_type", "code"),
                         new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                         new Param("code_challenge_method", "S256"),
-                        new Param("code_challenge", codeChallenge)))));
+                        new Param("code_challenge", codeChallenge))))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
@@ -106,11 +104,11 @@ public class AuthorizationRequestParserRedirectUriTest {
     @ParameterizedTest
     @MethodSource("getNoDefaultUriAllowedLists")
     public void testRedirectUriFailMissingNoDefault(List<URI> allowedUris) {
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
+                        new MockCredentials.MockClientRegistration() {
                             @Override
-                            public @NonNull Collection<URI> getAllowedRedirectUris() {
+                            public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                                 return allowedUris;
                             }
                         },
@@ -127,11 +125,11 @@ public class AuthorizationRequestParserRedirectUriTest {
     @ParameterizedTest
     @MethodSource("getFailsValidationUrisAndErrorMessage")
     public void testRedirectUriFailValidation(URI forceRedirectUri, String errorMessage) {
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
+                        new MockCredentials.MockClientRegistration() {
                             @Override
-                            public @NonNull Collection<URI> getAllowedRedirectUris() {
+                            public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                                 return List.of(forceRedirectUri);
                             }
                         },
@@ -149,11 +147,11 @@ public class AuthorizationRequestParserRedirectUriTest {
     @ParameterizedTest
     @MethodSource("getFailsValidationUrisAndErrorMessage")
     public void testRedirectUriFailValidationAsDefault(URI forceRedirectUri, String errorMessage) {
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
                 AuthorizationRequest.parser().parse(
-                        clientId -> new MockCredentials.MockClientInfo() {
+                        new MockCredentials.MockClientRegistration() {
                             @Override
-                            public @NonNull Collection<URI> getAllowedRedirectUris() {
+                            public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                                 return List.of(forceRedirectUri);
                             }
                         },
@@ -173,9 +171,9 @@ public class AuthorizationRequestParserRedirectUriTest {
         String codeChallenge = TestUtil.getRandom32Bytes();
 
         AuthorizationRequest request = assertDoesNotThrow(() -> AuthorizationRequest.parser().parse(
-                clientId -> new MockCredentials.MockClientInfo() {
+                new MockCredentials.MockClientRegistration() {
                     @Override
-                    public @NonNull Collection<URI> getAllowedRedirectUris() {
+                    public @NonNull @lombok.NonNull Collection<URI> getAllowedRedirectUris() {
                         return List.of(redirectUri);
                     }
                 },
@@ -184,7 +182,7 @@ public class AuthorizationRequestParserRedirectUriTest {
                         new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                         new Param("redirect_uri", redirectUri.toString()),
                         new Param("code_challenge_method", "S256"),
-                        new Param("code_challenge", codeChallenge)))));
+                        new Param("code_challenge", codeChallenge))))).getRequest();
 
         assertEquals(new AuthorizationRequest.AuthorizationCode(
                         MockCredentials.DEFAULT_CLAIM_CLIENT_ID,

@@ -3,7 +3,7 @@ package io.hoek.neoauth2.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import io.hoek.neoauth2.ParamWriter;
+import io.hoek.neoauth2.internal.ParamWriter;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -38,7 +38,7 @@ public class ErrorResponse implements ParamWriter.Writable {
     public String state;
 
     @Override
-    public void writeTo(ParamWriter writer) {
+    public void writeTo(ParamWriter<?> writer) {
         writer.set("error", error);
 
         if (errorMessage != null) {

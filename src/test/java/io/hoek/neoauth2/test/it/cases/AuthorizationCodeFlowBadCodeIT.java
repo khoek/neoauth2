@@ -1,11 +1,12 @@
 package io.hoek.neoauth2.test.it.cases;
 
-import io.hoek.neoauth2.backend.RegistrationAuthority;
+import io.hoek.neoauth2.backend.ClientRegistration;
 import io.hoek.neoauth2.model.ErrorResponse;
 import io.hoek.neoauth2.test.MockCredentials;
 import io.hoek.neoauth2.test.Param;
 import io.hoek.neoauth2.test.it.Flows;
 import io.hoek.neoauth2.test.it.MockFlows;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -54,8 +55,8 @@ public class AuthorizationCodeFlowBadCodeIT {
     public void testExpiredCode() throws IOException {
         ErrorResponse er = Flows.assertAuthorizationCodeFlowFailsAtTokenEndpoint(redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
             @Override
-            public RegistrationAuthority getRegistrationAuthority() {
-                return clientId -> new MockCredentials.MockClientInfo() {
+            public ClientRegistration getClientRegistration() {
+                return new MockCredentials.MockClientRegistration() {
                     @Override
                     public long getAuthorizationCodeLifetimeSeconds() {
                         return 0;
@@ -63,13 +64,10 @@ public class AuthorizationCodeFlowBadCodeIT {
                 };
             }
 
+            @SneakyThrows
             @Override
             public Flows.TokenEndpointResponse completeFlow(Flows.TokenEndpoint endpoint, String code) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ignored) {
-                }
-
+                Thread.sleep(1000);
                 return super.completeFlow(endpoint, code);
             }
         });

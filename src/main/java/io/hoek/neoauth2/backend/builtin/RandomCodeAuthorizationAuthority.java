@@ -1,42 +1,39 @@
 package io.hoek.neoauth2.backend.builtin;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.hoek.neoauth2.backend.AuthorizationCodeIssuer;
-import io.hoek.neoauth2.backend.AuthorizationCodeOrder;
+import io.hoek.util.function.Throw;
+import io.hoek.neoauth2.backend.AuthorizationAuthority;
+import io.hoek.neoauth2.backend.UserAuthorization;
 import io.hoek.neoauth2.internal.Util;
 import io.hoek.neoauth2.model.AuthorizationCodePayload;
 
+import javax.validation.constraints.NotNull;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Objects;
 
-public class RandomAuthorizationCodeIssuer implements AuthorizationCodeIssuer {
+public class RandomCodeAuthorizationAuthority implements AuthorizationAuthority {
     public static final int NUM_BYTES = 32;
 
     private final SecureRandom random = new SecureRandom();
     private final ObjectMapper mapper = new ObjectMapper();
     private final DataStore dataStore;
 
-    public RandomAuthorizationCodeIssuer(DataStore dataStore) {
+    public RandomCodeAuthorizationAuthority(@NotNull DataStore dataStore) {
         this.dataStore = Objects.requireNonNull(dataStore);
     }
 
     @Override
-    public AuthorizationCodePayload issueAuthorizationCode(AuthorizationCodeOrder content, Instant expiry) {
+    public AuthorizationCodePayload issueAuthorizationCode(UserAuthorization content, Instant expiry) {
         String code = Util.generateRandomBytesBase64UrlEncodedWithoutPadding(random, NUM_BYTES);
 
-        try {
-            dataStore.put(code, new DataStore.Entry(mapper.writeValueAsString(content), expiry));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        Throw.asRuntime(() -> dataStore.put(code, new DataStore.Entry(mapper.writeValueAsString(content), expiry)));
 
         return new AuthorizationCodePayload(code);
     }
 
     @Override
-    public AuthorizationCodeOrder readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
+    public UserAuthorization readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
         DataStore.Entry entry = dataStore.get(payload.getCode());
         if (entry == null) {
             return null;
@@ -49,10 +46,6 @@ public class RandomAuthorizationCodeIssuer implements AuthorizationCodeIssuer {
             return null;
         }
 
-        try {
-            return mapper.readValue(entry.getValue(), AuthorizationCodeOrder.class);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        return Throw.asRuntime(() -> mapper.readValue(entry.getValue(), UserAuthorization.class));
     }
 }

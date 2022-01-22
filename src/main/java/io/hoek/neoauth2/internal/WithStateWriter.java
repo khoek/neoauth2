@@ -1,7 +1,5 @@
 package io.hoek.neoauth2.internal;
 
-import io.hoek.neoauth2.ParamWriter;
-
 public class WithStateWriter implements ParamWriter.Writable {
     private final String state;
     private final ParamWriter.Writable writable;
@@ -12,7 +10,7 @@ public class WithStateWriter implements ParamWriter.Writable {
     }
 
     @Override
-    public void writeTo(ParamWriter writer) {
+    public void writeTo(ParamWriter<?> writer) {
         if(state != null) {
             writer.set("state", state);
         }

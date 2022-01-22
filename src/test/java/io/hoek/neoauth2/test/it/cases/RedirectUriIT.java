@@ -1,7 +1,7 @@
 package io.hoek.neoauth2.test.it.cases;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.hoek.neoauth2.backend.RegistrationAuthority;
+import io.hoek.neoauth2.backend.ClientRegistration;
 import io.hoek.neoauth2.test.MockCredentials;
 import io.hoek.neoauth2.test.Param;
 import io.hoek.neoauth2.test.it.Flows;
@@ -22,8 +22,8 @@ public class RedirectUriIT {
         ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(
                 redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
                     @Override
-                    public RegistrationAuthority getRegistrationAuthority() {
-                        return clientId -> new MockCredentials.MockClientInfo() {
+                    public ClientRegistration getClientRegistration() {
+                        return new MockCredentials.MockClientRegistration() {
                             @Override
                             public @NonNull Collection<URI> getAllowedRedirectUris() {
                                 return List.of(redirectUri);
@@ -56,8 +56,8 @@ public class RedirectUriIT {
         ObjectNode response = Flows.assertAuthorizationCodeFlowSucceeds(
                 redirectUri -> new MockFlows.StandardMockAuthorizationCodeFlow(redirectUri) {
                     @Override
-                    public RegistrationAuthority getRegistrationAuthority() {
-                        return clientId -> new MockCredentials.MockClientInfo() {
+                    public ClientRegistration getClientRegistration() {
+                        return new MockCredentials.MockClientRegistration() {
                             @Override
                             public @NonNull Collection<URI> getAllowedRedirectUris() {
                                 return List.of(redirectUri);

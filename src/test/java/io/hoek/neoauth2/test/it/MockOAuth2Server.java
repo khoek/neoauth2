@@ -4,8 +4,9 @@ import com.google.common.io.CharStreams;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.hoek.neoauth2.*;
+import io.hoek.neoauth2.backend.ClientRegistration;
 import io.hoek.neoauth2.backend.IssuerBundle;
-import io.hoek.neoauth2.backend.RegistrationAuthority;
+import io.hoek.neoauth2.backend.UserRegistration;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
@@ -113,8 +114,8 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
             extensions.forEach(parser::addExtension);
 
             return parser
-                    .parse(config.getRegistrationAuthority(), params)
-                    .generateAccessGranted(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub())
+                    .parse(config.getClientRegistration(), params)
+                    .grant(config.getIssuerBundle(), config.getUserRegistration())
                     .getResponse();
         } catch (WebApplicationException e) {
             return e.getResponse();
@@ -130,8 +131,8 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
     public Response doEndpointToken(ParamReader params) {
         try {
             return TokenRequest.parser()
-                    .parse(config.getIssuerBundle(), params)
-                    .generateAccessGranted(config.getIssuerBundle(), config.getRegistrationAuthority(), config.getSub())
+                    .parse(config.getIssuerBundle(), config.getClientRegistration(), params)
+                    .grant()
                     .getResponse();
         } catch (WebApplicationException e) {
             return e.getResponse();
@@ -145,10 +146,11 @@ public class MockOAuth2Server extends SimpleEphemeralServer {
     }
 
     public interface Configuration {
-        IssuerBundle<?, ?> getIssuerBundle();
 
-        RegistrationAuthority getRegistrationAuthority();
+        IssuerBundle getIssuerBundle();
 
-        String getSub();
+        ClientRegistration getClientRegistration();
+
+        UserRegistration getUserRegistration();
     }
 }

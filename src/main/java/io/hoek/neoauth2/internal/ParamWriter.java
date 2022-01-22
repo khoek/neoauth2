@@ -1,11 +1,4 @@
-package io.hoek.neoauth2;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.SneakyThrows;
-
-import javax.ws.rs.core.UriBuilder;
-import java.net.URI;
+package io.hoek.neoauth2.internal;
 
 public abstract class ParamWriter<Result> {
 

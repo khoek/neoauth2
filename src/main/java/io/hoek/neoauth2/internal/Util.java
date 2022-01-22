@@ -1,19 +1,14 @@
 package io.hoek.neoauth2.internal;
 
-import io.hoek.neoauth2.ParamReader;
-import io.hoek.neoauth2.model.ErrorResponse;
 import lombok.SneakyThrows;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriBuilder;
-import java.net.Inet4Address;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Base64;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class Util {
 

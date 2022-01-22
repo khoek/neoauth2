@@ -3,18 +3,11 @@ package io.hoek.neoauth2.backend;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.util.List;
-
 @Getter
 @AllArgsConstructor
 public class AccessTokenOrder {
 
-    private final String sub;
-    private final String aud;
-    private final List<String> scopes;
-    private final long expiresInSeconds;
-    private final String clientId;
+    private TokenSpec spec;
 
-    // SPEC NOTE: Nonstandard OIDC extension
-    private final String nonce;
+    private final long expiresInSecs;
 }

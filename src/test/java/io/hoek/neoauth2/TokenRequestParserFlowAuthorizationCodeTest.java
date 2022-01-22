@@ -1,10 +1,10 @@
 package io.hoek.neoauth2;
 
 import com.google.common.collect.Streams;
-import io.hoek.neoauth2.backend.AuthorizationCodeIssuer;
-import io.hoek.neoauth2.backend.AuthorizationCodeOrder;
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
-import io.hoek.neoauth2.exception.WritableWebApplicationException.JsonPage;
+import io.hoek.neoauth2.backend.AuthorizationAuthority;
+import io.hoek.neoauth2.backend.UserAuthorization;
+import io.hoek.neoauth2.backend.IssuerBundle;
+import io.hoek.neoauth2.backend.TokenSpec;
 import io.hoek.neoauth2.model.AuthorizationCodePayload;
 import io.hoek.neoauth2.model.CodeChallengeMethod;
 import io.hoek.neoauth2.model.ErrorResponse;
@@ -20,6 +20,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -27,22 +28,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class TokenRequestParserFlowAuthorizationCodeTest {
 
-    public static final class MockAuthorizationCodeVerifier implements AuthorizationCodeIssuer {
+    public static IssuerBundle getMockIssuerBundle(UserAuthorization order) {
+        return IssuerBundle.with(
+                new MockAuthorizationCodeVerifier(order),
+                o -> {
+                    throw new UnsupportedOperationException();
+                });
+    }
+
+    public static final class MockAuthorizationCodeVerifier implements AuthorizationAuthority {
+
         public static final String MAGIC_CODE = TestUtil.getRandom32Bytes();
 
-        private final AuthorizationCodeOrder order;
+        private final UserAuthorization order;
 
-        public MockAuthorizationCodeVerifier(AuthorizationCodeOrder order) {
+        public MockAuthorizationCodeVerifier(UserAuthorization order) {
             this.order = order;
         }
 
         @Override
-        public AuthorizationCodePayload issueAuthorizationCode(AuthorizationCodeOrder order, Instant expiry) {
+        public AuthorizationCodePayload issueAuthorizationCode(UserAuthorization order, Instant expiry) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public AuthorizationCodeOrder readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
+        public UserAuthorization readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
             if (payload.getCode().equals(MAGIC_CODE)) {
                 return order;
             }
@@ -64,20 +74,26 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
 
     @ParameterizedTest
     @MethodSource("getSuccessWithChallengeMethodsAndOptionalNonce")
+    @SuppressWarnings("unchecked")
     public void testSuccessWithChallengeMethodsAndOptionalNonce(CodeChallengeMethod codeChallengeMethod, String nonce) {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.ofEntries(Stream.concat(
+                                        Stream.of(Map.entry("sub", MockCredentials.DEFAULT_CLAIM_SUB)),
+                                        nonce == null ? Stream.of() : Stream.of(Map.entry("nonce", nonce))
+                                ).toArray(Map.Entry[]::new))),
                 true,
                 MockCredentials.DEFAULT_REDIRECT_URI,
-                codeChallengeMethod == null ? null : new PkceInfo(codeChallengeMethod, codeChallengeMethod.calculateChallenge(codeVerifier)),
-                nonce
+                codeChallengeMethod == null ? null : new PkceInfo(codeChallengeMethod, codeChallengeMethod.calculateChallenge(codeVerifier))
         );
 
         TokenRequest response = assertDoesNotThrow(() ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+                TokenRequest.parser().parse(
+                        getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(Streams.concat(Stream.of(
                                         new Param("grant_type", "authorization_code"),
                                         new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -85,7 +101,7 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
                                         new Param("code", MockAuthorizationCodeVerifier.MAGIC_CODE)),
                                 codeChallengeMethod == null ? Stream.of() : Stream.of(new Param("code_verifier", codeVerifier))
                         ).collect(Collectors.toUnmodifiableList()))
-                ));
+                )).getRequest();
 
         assertEquals(new TokenRequest.AuthorizationCode(order), response);
     }
@@ -93,10 +109,12 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMissingGrantType() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(
+                        getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("redirect_uri", MockCredentials.DEFAULT_REDIRECT_URI.toString()),
@@ -111,10 +129,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailUnknownGrantType() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "fancypants"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -130,10 +149,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailBadCode() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -149,10 +169,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMismatchedClientId() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", "ALEXANDER_DEADBEEF"),
@@ -168,18 +189,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMismatchedRedirectUriAndWasProvided() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 true,
                 URI.create("https://a.random.com/redirect_endpoint"),
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -195,18 +217,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMismatchedRedirectUriAndWasNotProvided() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 false,
                 URI.create("https://a.random.com/redirect_endpoint"),
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -222,18 +245,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMissingRedirectUriAndWasProvided() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 true,
                 URI.create("https://a.random.com/redirect_endpoint"),
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -248,25 +272,26 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testSuccessMissingRedirectUriAndWasNotProvided() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 false,
                 URI.create("https://a.random.com/redirect_endpoint"),
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
         TokenRequest response = assertDoesNotThrow(() ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
                                 new Param("code", MockAuthorizationCodeVerifier.MAGIC_CODE),
                                 new Param("code_verifier", codeVerifier)
                         ))
-                ));
+                )).getRequest();
 
         assertEquals(new TokenRequest.AuthorizationCode(order), response);
     }
@@ -274,10 +299,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailMalformedRedirectUri() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -293,10 +319,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailPkceWrongVerifier() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -312,10 +339,11 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailPkceMissingVerifier() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
+        UserAuthorization order = MockCredentials.getDefaultAuthorizationCodeOrder(codeVerifier);
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -330,18 +358,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailPkceVerifierPresentButMissingInOrder() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                MockCredentials.DEFAULT_SCOPES,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        MockCredentials.DEFAULT_SCOPES,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 true,
                 MockCredentials.DEFAULT_REDIRECT_URI,
-                null,
-                TestUtil.getRandom32Bytes()
+                null
         );
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -359,18 +388,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
         List<String> customScopes = List.of("31337Haxxor77scopeA", "31337Haxxor77scopeB");
 
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                customScopes,
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        customScopes,
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 true,
                 MockCredentials.DEFAULT_REDIRECT_URI,
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
         TokenRequest response = assertDoesNotThrow(() ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),
@@ -379,7 +409,7 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
                                 new Param("code", MockAuthorizationCodeVerifier.MAGIC_CODE),
                                 new Param("code_verifier", codeVerifier)
                         ))
-                ));
+                )).getRequest();
 
         assertEquals(new TokenRequest.AuthorizationCode(order), response);
     }
@@ -387,18 +417,19 @@ public class TokenRequestParserFlowAuthorizationCodeTest {
     @Test
     public void testFailCustomMismatchedScopes() {
         String codeVerifier = TestUtil.getRandom32Bytes();
-        AuthorizationCodeOrder order = new AuthorizationCodeOrder(
-                MockCredentials.DEFAULT_CLAIM_SUB,
-                MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
-                List.of("31337Haxxor77scopeA"),
+        UserAuthorization order = new UserAuthorization(
+                new TokenSpec(
+                        MockCredentials.DEFAULT_CLAIM_CLIENT_ID,
+                        List.of("31337Haxxor77scopeA"),
+                        Map.of("sub", MockCredentials.DEFAULT_CLAIM_SUB, "nonce", TestUtil.getRandom32Bytes())),
                 true,
                 MockCredentials.DEFAULT_REDIRECT_URI,
-                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier)),
-                TestUtil.getRandom32Bytes()
+                new PkceInfo(CodeChallengeMethod.S256, CodeChallengeMethod.S256.calculateChallenge(codeVerifier))
         );
 
-        ErrorResponse er = (ErrorResponse) assertThrows(WritableWebApplicationException.JsonPage.class, () ->
-                TokenRequest.parser().parse(new MockAuthorizationCodeVerifier(order),
+        ErrorResponse er = (ErrorResponse) assertThrows(OAuthReponse.JsonPage.class, () ->
+                TokenRequest.parser().parse(getMockIssuerBundle(order),
+                        new MockCredentials.MockClientRegistration(),
                         new Param.MockReader(List.of(
                                 new Param("grant_type", "authorization_code"),
                                 new Param("client_id", MockCredentials.DEFAULT_CLAIM_CLIENT_ID),

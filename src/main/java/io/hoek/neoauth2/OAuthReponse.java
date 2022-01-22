@@ -1,8 +1,7 @@
-package io.hoek.neoauth2.exception;
+package io.hoek.neoauth2;
 
-import io.hoek.neoauth2.ParamWriter;
 import io.hoek.neoauth2.internal.JsonParamWriter;
-import io.hoek.neoauth2.internal.UriBuilderQueryParamWriter;
+import io.hoek.neoauth2.internal.ParamWriter;
 import io.hoek.neoauth2.internal.Util;
 
 import javax.ws.rs.WebApplicationException;
@@ -10,11 +9,11 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.net.URI;
 
-public abstract class WritableWebApplicationException extends WebApplicationException {
+public abstract class OAuthReponse extends WebApplicationException {
 
     private final ParamWriter.Writable content;
 
-    WritableWebApplicationException(ParamWriter.Writable content, Response response) {
+    OAuthReponse(ParamWriter.Writable content, Response response) {
         super(response);
 
         this.content = content;
@@ -24,21 +23,20 @@ public abstract class WritableWebApplicationException extends WebApplicationExce
         return content;
     }
 
-    public static final class Redirect extends WritableWebApplicationException {
+    public static final class Redirect extends OAuthReponse {
 
-        private static Response buildResponse(URI baseUri, ParamWriter.Writable content) {
-            URI uriLocation = new UriBuilderQueryParamWriter(baseUri).buildWith(content);
+        private static Response buildResponse(ParamWriter<URI> writer, ParamWriter.Writable content) {
             return Util.addSecurityCacheControlHeaders(Response.status(Response.Status.FOUND))
-                    .header("Location", uriLocation)
+                    .header("Location", writer.buildWith(content))
                     .build();
         }
 
-        public Redirect(URI baseUri, ParamWriter.Writable content) {
-            super(content, buildResponse(baseUri, content));
+        public Redirect(ParamWriter<URI> writer, ParamWriter.Writable content) {
+            super(content, buildResponse(writer, content));
         }
     }
 
-    public static final class JsonPage extends WritableWebApplicationException {
+    public static final class JsonPage extends OAuthReponse {
 
         private static Response buildResponse(Response.Status status, ParamWriter.Writable content) {
             String body = new JsonParamWriter().buildWith(content);

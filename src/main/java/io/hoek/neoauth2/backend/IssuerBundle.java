@@ -2,28 +2,49 @@ package io.hoek.neoauth2.backend;
 
 import io.hoek.neoauth2.model.AccessTokenPayload;
 import io.hoek.neoauth2.model.AuthorizationCodePayload;
-import lombok.AllArgsConstructor;
+import io.hoek.neoauth2.model.RefreshTokenPayload;
 
 import java.time.Instant;
 
-@AllArgsConstructor
-public final class IssuerBundle<Auth extends AuthorizationCodeIssuer, Access extends AccessTokenIssuer>
-        implements AuthorizationCodeIssuer, AccessTokenIssuer {
-    private final Auth authorizationCodeIssuer;
-    private final Access accessTokenIssuer;
+public final class IssuerBundle implements AuthorizationAuthority, AccessTokenIssuer {
 
-    @Override
-    public AuthorizationCodePayload issueAuthorizationCode(AuthorizationCodeOrder order, Instant expiry) {
-        return authorizationCodeIssuer.issueAuthorizationCode(order, expiry);
+    private final AuthorizationAuthority auth;
+    private final AccessTokenIssuer access;
+
+    private IssuerBundle(AuthorizationAuthority auth, AccessTokenIssuer access) {
+        this.auth = auth;
+        this.access = access;
+    }
+
+    public static IssuerBundle withoutAuthorization(AccessTokenIssuer access) {
+        return IssuerBundle.with(new AuthorizationAuthority.Disabled(), access);
+    }
+
+    public static <Both extends AuthorizationAuthority & AccessTokenIssuer> IssuerBundle with(Both both) {
+        return IssuerBundle.with(both, both);
+    }
+
+    public static IssuerBundle with(AuthorizationAuthority auth, AccessTokenIssuer access) {
+        return new IssuerBundle(auth, access);
     }
 
     @Override
-    public AuthorizationCodeOrder readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
-        return authorizationCodeIssuer.readAndVerifyAuthorizationCode(payload);
+    public AuthorizationCodePayload issueAuthorizationCode(UserAuthorization order, Instant expiry) {
+        return auth.issueAuthorizationCode(order, expiry);
+    }
+
+    @Override
+    public UserAuthorization readAndVerifyAuthorizationCode(AuthorizationCodePayload payload) {
+        return auth.readAndVerifyAuthorizationCode(payload);
+    }
+
+    @Override
+    public UserAuthorization readAndVerifyRefreshToken(RefreshTokenPayload payload) {
+        return auth.readAndVerifyRefreshToken(payload);
     }
 
     @Override
     public AccessTokenPayload issueAccessToken(AccessTokenOrder order) {
-        return accessTokenIssuer.issueAccessToken(order);
+        return access.issueAccessToken(order);
     }
 }

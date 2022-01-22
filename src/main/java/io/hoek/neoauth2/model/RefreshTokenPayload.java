@@ -6,11 +6,11 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public class AuthorizationCodePayload implements ParamWriter.Writable {
-    private final String code;
+public class RefreshTokenPayload implements ParamWriter.Writable {
+    private final String refreshToken;
 
     @Override
     public void writeTo(ParamWriter<?> writer) {
-        writer.set("code", code);
+        writer.set("refresh_token", refreshToken);
     }
 }

@@ -1,7 +1,8 @@
 package io.hoek.neoauth2.test.it;
 
+import io.hoek.neoauth2.backend.ClientRegistration;
+import io.hoek.neoauth2.backend.UserRegistration;
 import io.hoek.neoauth2.backend.IssuerBundle;
-import io.hoek.neoauth2.backend.RegistrationAuthority;
 import io.hoek.neoauth2.internal.Util;
 import io.hoek.neoauth2.test.MockCredentials;
 import io.hoek.neoauth2.test.Param;
@@ -11,9 +12,6 @@ import java.net.URI;
 import java.security.SecureRandom;
 import java.util.Collection;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class MockFlows {
 
@@ -37,18 +35,18 @@ public class MockFlows {
         }
 
         @Override
-        public IssuerBundle<?, ?> getIssuerBundle() {
+        public IssuerBundle getIssuerBundle() {
             return MockCredentials.DEFAULT_ISSUER_BUNDLE;
         }
 
         @Override
-        public RegistrationAuthority getRegistrationAuthority() {
-            return MockCredentials.DEFAULT_REGISTRATION_AUTHORITY;
+        public ClientRegistration getClientRegistration() {
+            return MockCredentials.DEFAULT_CLIENT_REGISTRATION;
         }
 
         @Override
-        public String getSub() {
-            return MockCredentials.DEFAULT_CLAIM_SUB;
+        public UserRegistration getUserRegistration() {
+            return () -> MockCredentials.DEFAULT_CLAIM_SUB;
         }
 
         @Override
@@ -90,18 +88,18 @@ public class MockFlows {
         }
 
         @Override
-        public IssuerBundle<?, ?> getIssuerBundle() {
+        public IssuerBundle getIssuerBundle() {
             return MockCredentials.DEFAULT_ISSUER_BUNDLE;
         }
 
         @Override
-        public RegistrationAuthority getRegistrationAuthority() {
-            return MockCredentials.DEFAULT_REGISTRATION_AUTHORITY;
+        public ClientRegistration getClientRegistration() {
+            return MockCredentials.DEFAULT_CLIENT_REGISTRATION;
         }
 
         @Override
-        public String getSub() {
-            return MockCredentials.DEFAULT_CLAIM_SUB;
+        public UserRegistration getUserRegistration() {
+            return () -> MockCredentials.DEFAULT_CLAIM_SUB;
         }
 
         @Override

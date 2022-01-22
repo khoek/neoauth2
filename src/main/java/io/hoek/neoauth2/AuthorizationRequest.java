@@ -1,14 +1,9 @@
 package io.hoek.neoauth2;
 
-import io.hoek.neoauth2.backend.AccessTokenOrder;
-import io.hoek.neoauth2.backend.AuthorizationCodeOrder;
-import io.hoek.neoauth2.backend.IssuerBundle;
-import io.hoek.neoauth2.backend.RegistrationAuthority;
-import io.hoek.neoauth2.exception.WritableWebApplicationException;
+import io.hoek.neoauth2.backend.*;
 import io.hoek.neoauth2.internal.InvalidRequestException;
-import io.hoek.neoauth2.internal.WithStateWriter;
+import io.hoek.neoauth2.internal.ParamWriter;
 import io.hoek.neoauth2.model.CodeChallengeMethod;
-import io.hoek.neoauth2.model.ErrorResponse;
 import io.hoek.neoauth2.model.PkceInfo;
 import io.hoek.neoauth2.model.ResponseType;
 import lombok.EqualsAndHashCode;
@@ -65,24 +60,7 @@ public abstract class AuthorizationRequest {
 
     public abstract ResponseType getResponseType();
 
-    protected abstract ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle<?, ?> bundle, String sub, RegistrationAuthority.ClientInfo client) throws InvalidRequestException;
-
-    public final WritableWebApplicationException.Redirect generateAccessDenied() {
-        return new WritableWebApplicationException.Redirect(redirectUri, new ErrorResponse(ErrorResponse.DESC_ACCESS_DENIED, "resource owner denied access", state));
-    }
-
-    public final WritableWebApplicationException.Redirect generateAccessDenied(String reason) {
-        return new WritableWebApplicationException.Redirect(redirectUri, new ErrorResponse(ErrorResponse.DESC_ACCESS_DENIED, reason, state));
-    }
-
-    public final WritableWebApplicationException.Redirect generateAccessGranted(IssuerBundle<?, ?> bundle, RegistrationAuthority registrationAuthority, String sub) {
-        try {
-            return new WritableWebApplicationException.Redirect(redirectUri, new WithStateWriter(state,
-                    generateAccessGrantedWritable(bundle, sub, registrationAuthority.lookupClientId(getClientId()))));
-        } catch (InvalidRequestException e) {
-            return e.toRedirectException(getRedirectUri(), state);
-        }
-    }
+    abstract ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle bundle, ClientRegistration client, UserRegistration user) throws InvalidRequestException;
 
     @ToString(callSuper = true)
     @EqualsAndHashCode(callSuper = true)
@@ -98,14 +76,8 @@ public abstract class AuthorizationRequest {
         }
 
         @Override
-        protected ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle<?, ?> bundle, String sub, RegistrationAuthority.ClientInfo client) throws InvalidRequestException {
-            String aud = client.validateScopesAndGetAudience(getScopes());
-            if (aud == null) {
-                throw new InvalidRequestException(ErrorResponse.DESC_INVALID_SCOPE, "scopes not authorized");
-            }
-
-            return bundle.issueAccessToken(
-                    new AccessTokenOrder(sub, aud, getScopes(), client.getAccessTokenLifetimeSeconds(), getClientId(), nonce));
+        protected ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle bundle, ClientRegistration client, UserRegistration user) throws InvalidRequestException {
+            return bundle.issueAccessToken(new AccessTokenOrder(TokenSpec.from(client, user, getClientId(), getScopes(), nonce), client.getAccessTokenLifetimeSeconds()));
         }
     }
 
@@ -131,9 +103,9 @@ public abstract class AuthorizationRequest {
         }
 
         @Override
-        protected ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle<?, ?> bundle, String sub, RegistrationAuthority.ClientInfo client) {
+        protected ParamWriter.Writable generateAccessGrantedWritable(IssuerBundle bundle, ClientRegistration client, UserRegistration user)  throws InvalidRequestException {
             return bundle.issueAuthorizationCode(
-                    new AuthorizationCodeOrder(sub, getClientId(), getScopes(), wasRedirectUriProvided(), getRedirectUri(), pkceInfo, nonce),
+                    new UserAuthorization(TokenSpec.from(client, user, getClientId(), getScopes(), nonce), wasRedirectUriProvided(), getRedirectUri(), pkceInfo),
                     Instant.now().plus(Duration.ofSeconds(client.getAuthorizationCodeLifetimeSeconds())));
         }
     }
